@@ -1,130 +1,82 @@
 (ns om-tut.core
+  (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [om.core :as om :include-macros true]
             [om.dom :as dom :include-macros true]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [cljs.core.async :refer [put! chan <! >! close! timeout]]
+            [cljs-http.client :as http]))
 
 (enable-console-print!)
 
 (def app-state
-  (atom
-    {:contacts
-     [{:type :student :first "Ben" :last "Bitdddle" :email "benb@mit.edu"}
-      {:type :student :first "Alyssa" :middle-initial "P" :last "Hacker"
-       :email "aphacker@mit.edu"}
-      {:type :student :first "Eva" :middle "Lu" :last "Ator" :email "eval@mit.edu"}
-      {:type :student :first "Louis" :last "Reasoner" :email "prolog@mit.edu"}
-      {:type :professor :first "Gerald" :middle "Jay" :last "Sussman"
-       :email "metacirc@mit.edu" :classes [:6001 :6946]}
-      {:type :professor :first "Hal" :last "Abelson" :email "evalapply@mit.edu"
-       :classes [:6001]}]
-     :classes
-     {:6001 "The Structure and Interpretation of Computer Programs"
-      :6946 "The Structure and Interpretation of Classical Mechanics"
-      :1806 "Linear Algebra"}}))
-      
+  (atom {:repos []
+         :response "nothing here yet"
+         :map {:input
+               {:atts
+                {:name "No Map Loaded"}}}}))
 
-(defn middle-name [{:keys [middle middle-initial]}]
-  (cond
-    middle (str " " middle)
-    middle-initial (str " " middle-initial ".")))
+(def xdapi "http://localhost:5000/xd/")
+(def echo-url (str xdapi "echo"))
+(def repo-list-url (str xdapi "list"))
+(defn map-url [path] (str xdapi "map/" path))
 
-(defn display-name [{:keys [first last] :as contact}]
-  (str last ", " first (middle-name contact)))
+(defn GET [url]
+  (let [c (chan)]
+    (go (let [response (<! (http/get url {:with-credentials? false}))]
+          (>! c response)))
+    c))
 
-(defn student-view [student owner]
-  (reify
-    om/IRender
-    (render [_]
-      (dom/li nil (display-name student)))))
+(go
+  (let [echo-resp (<! (GET echo-url))
+        list-resp (<! (GET repo-list-url))
+        map-resp (<! (GET (map-url "examples/master/attributed_xml/poCustWrite.xtl")))]
+    (prn (:repos (:body list-resp)))
+    (prn (:body map-resp))
+    (swap! app-state assoc :response (:body echo-resp))
+    (swap! app-state assoc :repos (:repos (:body list-resp)))
+    (swap! app-state assoc :map (:body map-resp))))
 
-(defn professor-view [professor owner]
-  (reify
-    om/IRender
-    (render [_]
-      (dom/li nil
-              (dom/div nil (display-name professor))
-              (dom/label nil "Classes")
-              (apply dom/ul nil
-                     (map #(dom/li nil (om/value %)) (:classes professor)))))))
+(defn handle-change [e owner {:keys [text]}]
+  (om/set-state! owner :text (.. e -target -value)))
 
-(defmulti entry-view (fn [person _] (:type person)))
+(defn find-exact-matches [xs x]
+  (filter #(if (nil? x) true
+             (> (.indexOf % x) -1)) xs))
 
-(defmethod entry-view :student
-  [person owner] (student-view person owner))
-
-(defmethod entry-view :professor
-  [person owner] (professor-view person owner))
-
-(defn people [app]
-  (->> (:people app)
-       (mapv (fn [x]
-               (if (:classes x)
-                 (update-in x [:classes]
-                            (fn [cs] (mapv (:classes app) cs)))
-                 x)))))
-
-(defn display [show]
-  (if show
-    #js {}
-    #js {:display "none"}))
-
-(defn handle-change [e text owner]
-  (om/transact! text (fn [_] (.. e -target -value))))
-
-(defn commit-change [text owner]
-  (om/set-state! owner :editing false))
-
-(extend-type string
-  ICloneable
-  (-clone [s] (js/String. s)))
-
-(extend-type js/String
-  ICloneable
-  (-clone [s] (js/String. s))
-  om/IValue
-  (-value [s] (str s)))
-
-(defn editable [text owner]
+(defn search-view [app owner]
   (reify
     om/IInitState
     (init-state [_]
-      {:editing false})
-    om/IRenderState
-    (render-state [_ {:keys [editing]}]
-      (dom/li nil
-              (dom/span #js {:style (display (not editing))} (om/value text))
-              (dom/input
-                #js {:style (display editing)
-                     :value (om/value text)
-                     :onChange #(handle-change % text owner)
-                     :onKeyDown #(when (= (.-key %) "Enter")
-                                   (commit-change text owner))
-                     :onBlur (fn [e] (commit-change text owner))})
-              (dom/button
-                #js {:style (display (not editing))
-                     :onClick #(om/set-state! owner :editing true)}
-                "Edit")))))
-
-(defn registry-view [app owner]
-  (reify
+      {:text nil})
     om/IRenderState
     (render-state [_ state]
-      (dom/div #js {:id "registry"}
-               (dom/h2 nil "Registry")
-               (apply dom/ul nil
-                      (om/build-all entry-view (people app)))))))
+      (dom/div nil
+               (apply dom/ul #js {:className "repo-list"}
+                              (dom/input
+                                #js {:type "text" :ref "repo-list" :value (:text state)
+                                     :onChange (fn [event] (handle-change event owner state))})
+                              (let [repo-list-result (:repos app)
+                                    matching-repos (take 10 (find-exact-matches repo-list-result (:text state)))]
+                                (map #(dom/li nil %)
+                                     (if (> (count matching-repos) 0) matching-repos '("no matching repos")))))))))
 
-(defn classes-view [app owner]
+(om/root 
+  search-view
+  app-state
+  {:target (. js/document (getElementById "search-area"))})
+
+(defn map-view [app owner]
   (reify
     om/IRender
     (render [_]
-      (dom/div #js {:id "classes"}
-               (dom/h2 nil "Classes")
-               (apply dom/ul nil
-                      (om/build-all editable (vals (:classes app))))))))
+      (dom/p nil (:name (:atts (:input (:map app))))))))
 
-(om/root registry-view app-state
-         {:target (. js/document (getElementById "registry"))})
+(om/root map-view app-state
+  {:target (. js/document (getElementById "map-area"))})
 
-(om/root classes-view app-state
-         {:target (. js/document (getElementById "registry"))})
+(om/root
+  (fn [app owner]
+    (om/component
+      (dom/h2 nil "Tree Editor")))
+  app-state
+  {:target (. js/document (getElementById "header"))})
