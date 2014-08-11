@@ -13,10 +13,10 @@
   :source-paths ["src"]
 
   :cljsbuild { 
-    :builds [{:id "om-tut"
+    :builds [{:id "tree-editor"
               :source-paths ["src"]
               :compiler {
-                :output-to "om_tut.js"
+                :output-to "tree_editor.js"
                 :output-dir "out"
                 :optimizations :none
                 :source-map true}}]})
