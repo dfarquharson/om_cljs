@@ -13,7 +13,10 @@
          :response "nothing here yet"
          :map {:input
                {:atts
-                {:name "No Map Loaded"}}}}))
+                {:name "No Input Tree Loaded"}}
+               :output
+               {:atts
+                {:name "No Output Tree Loaded"}}}}))
 
 (def xdapi "http://localhost:5000/xd/")
 (def echo-url (str xdapi "echo"))
@@ -26,12 +29,21 @@
           (>! c response)))
     c))
 
+(defn POST [url payload]
+  (let [c (chan)]
+    (go (let [response (<! (http/post url (conj {:with-credentials? false}
+                                                {:json-params payload})))]
+          (>! c response)))
+    c))
+
 (go
   (let [echo-resp (<! (GET echo-url))
+        echo-post (<! (POST echo-url {:key "value"}))
         list-resp (<! (GET repo-list-url))
         map-resp (<! (GET (map-url "examples/master/attributed_xml/poCustWrite.xtl")))]
     (prn (:repos (:body list-resp)))
     (prn (:body map-resp))
+    (prn (:body echo-post))
     (swap! app-state assoc :response (:body echo-resp))
     (swap! app-state assoc :repos (:repos (:body list-resp)))
     (swap! app-state assoc :map (:body map-resp))))
@@ -81,7 +93,7 @@
       (dom/p nil (:name (:atts (:input (:map app))))))))
 
 (om/root map-view app-state
-  {:target (. js/document (getElementById "map-area"))})
+  {:target (. js/document (getElementById "map-workspace"))})
 
 (om/root
   (fn [app owner]
