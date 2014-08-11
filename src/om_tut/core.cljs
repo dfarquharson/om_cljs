@@ -9,14 +9,18 @@
 (enable-console-print!)
 
 (def app-state
-  (atom {:repos []
+  (atom {:repos ["loading repos..."]
          :response "nothing here yet"
          :map {:input
                {:atts
-                {:name "No Input Tree Loaded"}}
+                {:name "Loading Input Tree..."}
+                :children [{:atts
+                            {:fullyQualifiedJavaName "No Input Tree Selected"}}]}
                :output
                {:atts
-                {:name "No Output Tree Loaded"}}}}))
+                {:name "Loading Output Tree..."}
+                :children [{:atts
+                            {:fullyQualifiedJavaName "No Output Tree Selected"}}]}}}))
 
 (def xdapi "http://localhost:5000/xd/")
 (def echo-url (str xdapi "echo"))
@@ -36,24 +40,42 @@
           (>! c response)))
     c))
 
-(go
-  (let [echo-resp (<! (GET echo-url))
-        echo-post (<! (POST echo-url {:key "value"}))
-        list-resp (<! (GET repo-list-url))
-        map-resp (<! (GET (map-url "examples/master/attributed_xml/poCustWrite.xtl")))]
-    (prn (:repos (:body list-resp)))
-    (prn (:body map-resp))
-    (prn (:body echo-post))
-    (swap! app-state assoc :response (:body echo-resp))
-    (swap! app-state assoc :repos (:repos (:body list-resp)))
-    (swap! app-state assoc :map (:body map-resp))))
+(defn DELETE [url]
+  (let [c (chan)]
+    (go (let [response (<! (http/delete url {:with-credentials? false}))]
+          (>! c response)))
+    c))
+
+; updating the global state with http requests
+; definitely a code-smell. not sure how to avoid it yet.
+(defn test-get-post-delete []
+  (go
+    (let [echo-get (<! (GET echo-url))
+          echo-post (<! (POST echo-url {:key "value"}))
+          echo-delete (<! (DELETE echo-url))]
+      (prn (:body echo-get))
+      (prn (:body echo-post))
+      (prn (:body echo-delete))
+      (swap! app-state assoc :response (:body echo-get)))))
+(test-get-post-delete)
+
+(defn update-repo-list []
+  (go
+    (let [repo-list (<! (GET repo-list-url))]
+      (prn (:repos (:body repo-list)))
+      (swap! app-state assoc :repos (:repos (:body repo-list))))))
+(update-repo-list)
+
+(defn load-map [path]
+  (swap! app-state assoc (:fullyQualifiedJavaName (:atts (first (:children (:input (:map "Loading input...")))))))
+  (swap! app-state assoc (:fullyQualifiedJavaName (:atts (first (:children (:output (:map "Loading output...")))))))
+  (go
+    (let [map-resp (<! (GET (map-url path)))]
+      (prn (:body map-resp))
+      (swap! app-state assoc :map (:body map-resp)))))
 
 (defn handle-change [e owner {:keys [text]}]
   (om/set-state! owner :text (.. e -target -value)))
-
-(defn find-exact-matches [xs x]
-  (filter #(if (nil? x) true
-             (> (.indexOf % x) -1)) xs))
 
 (defn find-fuzzy-matches [coll query]
   (let [contains-all (fn [y xs]
@@ -86,11 +108,28 @@
   app-state
   {:target (. js/document (getElementById "search-area"))})
 
-(defn map-view [app owner]
+(defn xtl-view [app owner]
   (reify
     om/IRender
     (render [_]
       (dom/p nil (:name (:atts (:input (:map app))))))))
+
+(defn map-view [app owner]
+  (reify
+    om/IInitState
+    (init-state [_]
+      {:text "examples/master/attributed_xml/poCustWrite.xtl"})
+    om/IRenderState
+    (render-state [_ state]
+      (dom/div #js {:id "map-workspace"}
+               (dom/h2 nil "Map Workspace")
+               (dom/input
+                 #js {:type "text" :ref "map-path" :value (:text state) :size "40"})
+               (dom/button
+                 #js {:onClick #(load-map (:text state))} "Load Map")
+               (dom/ul nil
+                       (dom/li nil (:fullyQualifiedJavaName (:atts (first (:children (:input (:map app)))))))
+                       (dom/li nil (:fullyQualifiedJavaName (:atts (first (:children (:output (:map app))))))))))))
 
 (om/root map-view app-state
   {:target (. js/document (getElementById "map-workspace"))})
