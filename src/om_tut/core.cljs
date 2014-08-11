@@ -43,6 +43,12 @@
   (filter #(if (nil? x) true
              (> (.indexOf % x) -1)) xs))
 
+(defn find-fuzzy-matches [coll query]
+  (let [contains-all (fn [y xs]
+                       (reduce #(and %1 %2) (for [x xs] (.contains y x))))
+        words (if (nil? query) "" (string/split query #"\s+"))]
+    (filter #(contains-all (string/lower-case %) words) coll)))
+
 (defn search-view [app owner]
   (reify
     om/IInitState
@@ -56,9 +62,12 @@
                                 #js {:type "text" :ref "repo-list" :value (:text state)
                                      :onChange (fn [event] (handle-change event owner state))})
                               (let [repo-list-result (:repos app)
-                                    matching-repos (take 10 (find-exact-matches repo-list-result (:text state)))]
+                                    matching-repos (take 10 (find-fuzzy-matches repo-list-result (:text state)))]
                                 (map #(dom/li nil %)
-                                     (if (> (count matching-repos) 0) matching-repos '("no matching repos")))))))))
+                                     (cond
+                                       (> (count matching-repos) 0) matching-repos
+                                       (= (count matching-repos) (count (:text state)) 0) (take 10 (:repos app))
+                                       :else '("no matching repos")))))))))
 
 (om/root 
   search-view
