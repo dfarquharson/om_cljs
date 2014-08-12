@@ -2,6 +2,7 @@
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [om.core :as om :include-macros true]
             [om.dom :as dom :include-macros true]
+            [clojure.zip :as zip]
             [clojure.string :as string]
             [cljs.core.async :refer [put! chan <! >! close! timeout]]
             [cljs-http.client :as http]))
@@ -66,9 +67,24 @@
       (swap! app-state assoc :repos (:repos (:body repo-list))))))
 (update-repo-list)
 
+(defn print-tree [original]
+  (loop [loc (zip/seq-zip (seq original))]
+    (if (zip/end? loc)
+      (zip/root loc)
+      (recur (zip/next
+               (do (prn (zip/node loc))
+                   loc))))))
+
 (defn load-map [path]
-  (swap! app-state assoc (:fullyQualifiedJavaName (:atts (first (:children (:input (:map "Loading input...")))))))
-  (swap! app-state assoc (:fullyQualifiedJavaName (:atts (first (:children (:output (:map "Loading output...")))))))
+  (let [loading-map {:input {:children [{:atts {:fullyQualifiedJavaName "Loading input..."}}]}
+                     :output {:children [{:atts {:fullyQualifiedJavaName "Loading output..."}}]}}]
+    (swap! app-state assoc :map loading-map)
+    ; TAKE NOTE
+    ; this is just the first foray into the world of zippers to do stuff to xtls
+    ; this will be the future of the meat of this client
+    ; I don't know much about them yet, but this is going to be big stuff
+    (def root-loc (zip/seq-zip (seq loading-map)))
+    (prn root-loc))
   (go
     (let [map-resp (<! (GET (map-url path)))]
       (prn (:body map-resp))
@@ -94,7 +110,7 @@
                (apply dom/ul #js {:className "repo-list"}
                               (dom/input
                                 #js {:type "text" :ref "repo-list" :value (:text state)
-                                     :onChange (fn [event] (handle-change event owner state))})
+                                     :onChange #(handle-change % owner state)})
                               (let [repo-list-result (:repos app)
                                     matching-repos (take 10 (find-fuzzy-matches repo-list-result (:text state)))]
                                 (map #(dom/li nil %)
@@ -124,12 +140,13 @@
       (dom/div #js {:id "map-workspace"}
                (dom/h2 nil "Map Workspace")
                (dom/input
-                 #js {:type "text" :ref "map-path" :value (:text state) :size "40"})
+                 #js {:type "text" :ref "map-path" :value (:text state) :size "40"
+                      :onChange #(handle-change % owner state)})
                (dom/button
                  #js {:onClick #(load-map (:text state))} "Load Map")
                (dom/ul nil
-                       (dom/li nil (:fullyQualifiedJavaName (:atts (first (:children (:input (:map app)))))))
-                       (dom/li nil (:fullyQualifiedJavaName (:atts (first (:children (:output (:map app))))))))))))
+                       (dom/li nil (-> app :map :input :children first :atts :fullyQualifiedJavaName))
+                       (dom/li nil (-> app :map :output :children first :atts :fullyQualifiedJavaName)))))))
 
 (om/root map-view app-state
   {:target (. js/document (getElementById "map-workspace"))})
