@@ -5,7 +5,8 @@
             [clojure.zip :as zip]
             [clojure.string :as string]
             [cljs.core.async :refer [put! chan <! >! close! timeout]]
-            [cljs-http.client :as http]))
+            [cljs-http.client :as http]
+            [clojure.browser.repl :as repl]))
 
 (enable-console-print!)
 
@@ -58,37 +59,27 @@
       (prn (:body echo-post))
       (prn (:body echo-delete))
       (swap! app-state assoc :response (:body echo-get)))))
-(test-get-post-delete)
+(comment (test-get-post-delete))
 
 (defn update-repo-list []
   (go
     (let [repo-list (<! (GET repo-list-url))]
       (prn (:repos (:body repo-list)))
       (swap! app-state assoc :repos (:repos (:body repo-list))))))
-(update-repo-list)
-
-(defn print-tree [original]
-  (loop [loc (zip/seq-zip (seq original))]
-    (if (zip/end? loc)
-      (zip/root loc)
-      (recur (zip/next
-               (do (prn (zip/node loc))
-                   loc))))))
+; uncomment for 'real' use
+(comment (update-repo-list))
 
 (defn load-map [path]
   (let [loading-map {:input {:children [{:atts {:fullyQualifiedJavaName "Loading input..."}}]}
                      :output {:children [{:atts {:fullyQualifiedJavaName "Loading output..."}}]}}]
-    (swap! app-state assoc :map loading-map)
-    ; TAKE NOTE
-    ; this is just the first foray into the world of zippers to do stuff to xtls
-    ; this will be the future of the meat of this client
-    ; I don't know much about them yet, but this is going to be big stuff
-    (def root-loc (zip/seq-zip (seq loading-map)))
-    (prn root-loc))
+    (swap! app-state assoc :map loading-map))
   (go
-    (let [map-resp (<! (GET (map-url path)))]
-      (prn (:body map-resp))
+    (let [map-path (map-url path)
+          map-resp (<! (GET map-path))]
+      (prn (str map-path ", " (:status map-resp)))
       (swap! app-state assoc :map (:body map-resp)))))
+; just for testing because I'm too lazy to click the button all the time
+(load-map "examples/master/attributed_xml/poCustWrite.xtl")
 
 (defn handle-change [e owner {:keys [text]}]
   (om/set-state! owner :text (.. e -target -value)))
@@ -118,17 +109,29 @@
                                        (> (count matching-repos) 0) matching-repos
                                        (= (count matching-repos) (count (:text state)) 0) (take 10 (:repos app))
                                        :else '("no matching repos")))))))))
-
-(om/root 
-  search-view
-  app-state
+(comment
+(om/root search-view app-state
   {:target (. js/document (getElementById "search-area"))})
+  )
+
+(defn just-n [n]
+  (if (contains? n :children)
+    (assoc n :children (count (:children n)))
+    n))
+
+(defn get-docdef-atts [xtl]
+  (-> xtl :children first :atts))
 
 (defn xtl-view [app owner]
   (reify
     om/IRender
     (render [_]
-      (dom/p nil (:name (:atts (:input (:map app))))))))
+      (dom/p nil (-> app :map :input :atts :name)))))
+
+(defn recur-node-print [n]
+  (apply dom/ul nil
+         (let [atts (:atts n)]
+           (map #(dom/li nil (str (name %) ": " (% atts))) (keys atts)))))
 
 (defn map-view [app owner]
   (reify
@@ -144,16 +147,32 @@
                       :onChange #(handle-change % owner state)})
                (dom/button
                  #js {:onClick #(load-map (:text state))} "Load Map")
-               (dom/ul nil
-                       (dom/li nil (-> app :map :input :children first :atts :fullyQualifiedJavaName))
-                       (dom/li nil (-> app :map :output :children first :atts :fullyQualifiedJavaName)))))))
+               (let [input (-> app :map :input)
+                     output (-> app :map :output)
+                     in-docdef (-> app :map :input get-docdef-atts)
+                     out-docdef (-> app :map :output get-docdef-atts)
+                     fqjn :fullyQualifiedJavaName]
+                 (dom/ul nil
+                         (dom/li nil (fqjn in-docdef))
+                         (dom/ul nil
+                                 (recur-node-print (-> input :children first))
+                                 (dom/li nil (str "docdef child count: " (-> input :children first just-n :children)))
+                                 )
+                         (dom/li nil (fqjn out-docdef))
+                         (dom/ul nil
+                                 (recur-node-print (-> output :children first))
+                                 (dom/li nil (str "docdef child count: " (-> output :children first just-n :children))))
+                         (-> input just-n prn)
+                         ))))))
 
 (om/root map-view app-state
   {:target (. js/document (getElementById "map-workspace"))})
 
+(comment
 (om/root
   (fn [app owner]
     (om/component
       (dom/h2 nil "Tree Editor")))
   app-state
   {:target (. js/document (getElementById "header"))})
+  )
