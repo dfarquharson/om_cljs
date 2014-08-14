@@ -81,6 +81,15 @@
 ; just for testing because I'm too lazy to click the button all the time
 (load-map "examples/master/attributed_xml/poCustWrite.xtl")
 
+(comment
+(om/root
+  (fn [app owner]
+    (om/component
+      (dom/h2 nil "Tree Editor")))
+  app-state
+  {:target (. js/document (getElementById "header"))})
+  )
+
 (defn handle-change [e owner {:keys [text]}]
   (om/set-state! owner :text (.. e -target -value)))
 
@@ -114,6 +123,8 @@
   {:target (. js/document (getElementById "search-area"))})
   )
 
+
+; tree view from here down
 (defn get-docdef-atts [xtl]
   (-> xtl :children first :atts))
 
@@ -123,23 +134,44 @@
 
 (defn atts-component [atts owner]
   (om/component
-    (apply dom/ul nil (om/build-all att-component (seq atts)))))
+    (dom/div #js {:style #js {:border "1px solid green"}}
+             (apply dom/ul nil (om/build-all att-component (seq atts))))))
 
 (defn node-component [node owner]
-  (om/component
-    (dom/ul nil
-            (dom/li nil (str "tag: " (:name node)))
-            (dom/li nil (str "text: " (:text node)))
-            (dom/li nil (str "atts: "))
-            (om/build atts-component (:atts node))
-            (dom/li nil (str "children: " (-> node :children count)))
-            (apply dom/ul nil
-                   (om/build-all node-component (:children node))))))
+  (reify
+    om/IRender
+    (render [_]
+      (dom/div nil
+               (dom/ul #js {:style #js {:border "1px solid blue"}}
+                       (dom/li nil (str "tag: " (:name node)))
+                       (dom/li nil (str "text: " (om/value (:text node))))
+                       (dom/li nil (str "atts: "))
+                       (om/build atts-component (:atts node))
+                       (dom/li nil (str "children: " (-> node :children count)))
+                       (apply dom/ul nil
+                              (om/build-all node-component (:children node))))))))
 
 (defn xtl-component [xtl owner]
   (om/component
-    (dom/div nil
-             (dom/h3 nil (str "xtl name: " (-> xtl get-docdef-atts :fullyQualifiedJavaName))))))
+    (dom/div #js {:id (-> xtl get-docdef-atts :fullyQualifiedJavaName)
+                  :style #js {:border "1px solid red"
+                              ;:float "left"
+                              ;:width "500px"}}
+                              }}
+             (dom/h3 nil (str "xtl name: " (-> xtl get-docdef-atts :fullyQualifiedJavaName)))
+             (om/build node-component xtl))))
+
+(defn mapping-area [app owner]
+  (reify
+    om/IRender
+    (render [_]
+      (dom/div #js {:id "map-area"}
+               (let [input (-> app :map :input)
+                     output (-> app :map :output)]
+                 (dom/ul nil
+                         (om/build xtl-component input)
+                         (om/build xtl-component output)))))))
+
 
 (defn map-view [app owner]
   (reify
@@ -155,23 +187,7 @@
                       :onChange #(handle-change % owner state)})
                (dom/button
                  #js {:onClick #(load-map (:text state))} "Load Map")
-               (let [input (-> app :map :input)
-                     output (-> app :map :output)
-                     fqjn :fullyQualifiedJavaName]
-                 (dom/ul nil
-                         (om/build xtl-component input)
-                         (om/build node-component (-> input))
-                         (om/build xtl-component output)
-                         (om/build node-component (-> output))))))))
+               (om/build mapping-area app)))))
 
 (om/root map-view app-state
   {:target (. js/document (getElementById "map-workspace"))})
-
-(comment
-(om/root
-  (fn [app owner]
-    (om/component
-      (dom/h2 nil "Tree Editor")))
-  app-state
-  {:target (. js/document (getElementById "header"))})
-  )
