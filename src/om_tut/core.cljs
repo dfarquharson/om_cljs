@@ -128,10 +128,17 @@
     (render [_]
       (dom/p nil (-> app :map :input :atts :name)))))
 
-(defn recur-node-print [n]
+(defn print-atts [n]
   (apply dom/ul nil
          (let [atts (:atts n)]
            (map #(dom/li nil (str (name %) ": " (% atts))) (keys atts)))))
+
+(defn print-node [n]
+  (dom/ul nil
+          (dom/li nil (str "tag: " (:name n)))
+          (dom/li nil (str "text: " (:text n)))
+          (dom/li nil (str "atts: ") (print-atts n))
+          (dom/li nil (str "children count: " (:children n)))))
 
 (defn map-view [app owner]
   (reify
@@ -154,16 +161,9 @@
                      fqjn :fullyQualifiedJavaName]
                  (dom/ul nil
                          (dom/li nil (fqjn in-docdef))
-                         (dom/ul nil
-                                 (recur-node-print (-> input :children first))
-                                 (dom/li nil (str "docdef child count: " (-> input :children first just-n :children)))
-                                 )
+                         (print-node (-> input :children first just-n))
                          (dom/li nil (fqjn out-docdef))
-                         (dom/ul nil
-                                 (recur-node-print (-> output :children first))
-                                 (dom/li nil (str "docdef child count: " (-> output :children first just-n :children))))
-                         (-> input just-n prn)
-                         ))))))
+                         (print-node (-> output :children first just-n))))))))
 
 (om/root map-view app-state
   {:target (. js/document (getElementById "map-workspace"))})
