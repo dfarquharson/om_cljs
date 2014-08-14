@@ -114,36 +114,32 @@
   {:target (. js/document (getElementById "search-area"))})
   )
 
-(defn just-n [n]
-  (if (contains? n :children)
-    (assoc n :children (count (:children n)))
-    n))
-
 (defn get-docdef-atts [xtl]
   (-> xtl :children first :atts))
 
-(defn xtl-view [app owner]
-  (reify
-    om/IRender
-    (render [_]
-      (dom/p nil (-> app :map :input :atts :name)))))
+(defn att-component [[k v] owner]
+  (om/component
+    (dom/li nil (str (name k) ": " v))))
 
-(defn print-atts [n]
-  (apply dom/ul nil
-         (let [atts (:atts n)]
-           (map #(dom/li nil (str (name %) ": " (% atts))) (keys atts)))))
+(defn atts-component [atts owner]
+  (om/component
+    (apply dom/ul nil (om/build-all att-component (seq atts)))))
 
-(defn print-children [cs]
-  (apply dom/ul nil
-         (map #(dom/li nil (print-node %)) cs)))
+(defn node-component [node owner]
+  (om/component
+    (dom/ul nil
+            (dom/li nil (str "tag: " (:name node)))
+            (dom/li nil (str "text: " (:text node)))
+            (dom/li nil (str "atts: "))
+            (om/build atts-component (:atts node))
+            (dom/li nil (str "children: " (-> node :children count)))
+            (apply dom/ul nil
+                   (om/build-all node-component (:children node))))))
 
-(defn print-node [n]
-  (dom/ul nil
-          (dom/li nil (str "tag: " (:name n)))
-          (dom/li nil (str "text: " (:text n)))
-          (dom/li nil (str "atts: ") (print-atts n))
-          (dom/li nil (str "children: ") (-> n :children print-children))))
-          ;(dom/li nil (str "children count: " (:children n)))))
+(defn xtl-component [xtl owner]
+  (om/component
+    (dom/div nil
+             (dom/h3 nil (str "xtl name: " (-> xtl get-docdef-atts :fullyQualifiedJavaName))))))
 
 (defn map-view [app owner]
   (reify
@@ -161,15 +157,12 @@
                  #js {:onClick #(load-map (:text state))} "Load Map")
                (let [input (-> app :map :input)
                      output (-> app :map :output)
-                     in-docdef (-> app :map :input get-docdef-atts)
-                     out-docdef (-> app :map :output get-docdef-atts)
                      fqjn :fullyQualifiedJavaName]
                  (dom/ul nil
-                         (dom/li nil (str "input xtl: "(fqjn in-docdef)))
-                         (print-node input)
-                         (dom/br nil nil)
-                         (dom/li nil (str "output xtl: " (fqjn out-docdef)))
-                         (print-node output)))))))
+                         (om/build xtl-component input)
+                         (om/build node-component (-> input))
+                         (om/build xtl-component output)
+                         (om/build node-component (-> output))))))))
 
 (om/root map-view app-state
   {:target (. js/document (getElementById "map-workspace"))})
