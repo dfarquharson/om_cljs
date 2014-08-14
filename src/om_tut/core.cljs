@@ -133,12 +133,17 @@
          (let [atts (:atts n)]
            (map #(dom/li nil (str (name %) ": " (% atts))) (keys atts)))))
 
+(defn print-children [cs]
+  (apply dom/ul nil
+         (map #(dom/li nil (print-node %)) cs)))
+
 (defn print-node [n]
   (dom/ul nil
           (dom/li nil (str "tag: " (:name n)))
           (dom/li nil (str "text: " (:text n)))
           (dom/li nil (str "atts: ") (print-atts n))
-          (dom/li nil (str "children count: " (:children n)))))
+          (dom/li nil (str "children: ") (-> n :children print-children))))
+          ;(dom/li nil (str "children count: " (:children n)))))
 
 (defn map-view [app owner]
   (reify
@@ -160,10 +165,11 @@
                      out-docdef (-> app :map :output get-docdef-atts)
                      fqjn :fullyQualifiedJavaName]
                  (dom/ul nil
-                         (dom/li nil (fqjn in-docdef))
-                         (print-node (-> input :children first just-n))
-                         (dom/li nil (fqjn out-docdef))
-                         (print-node (-> output :children first just-n))))))))
+                         (dom/li nil (str "input xtl: "(fqjn in-docdef)))
+                         (print-node input)
+                         (dom/br nil nil)
+                         (dom/li nil (str "output xtl: " (fqjn out-docdef)))
+                         (print-node output)))))))
 
 (om/root map-view app-state
   {:target (. js/document (getElementById "map-workspace"))})
