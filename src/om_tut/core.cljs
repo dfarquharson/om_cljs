@@ -79,7 +79,7 @@
       (prn (str map-path ", " (:status map-resp)))
       (swap! app-state assoc :map (:body map-resp)))))
 ; just for testing because I'm too lazy to click the button all the time
-(load-map "examples/master/attributed_xml/poCustWrite.xtl")
+;(load-map "examples/master/attributed_xml/poCustWrite.xtl")
 
 (comment
 (om/root
@@ -246,3 +246,22 @@
 
 (om/root map-view app-state
   {:target (. js/document (getElementById "map-workspace"))})
+
+; should be focused with C-x C-m
+; users can bind commands to the keyboard shortcuts of their choice from here
+; for instance, should be able to use a color-picker to set background color
+(defn mini-buffer [app owner]
+  (reify
+    om/IInitState
+    (init-state [_]
+      {:text nil})
+    om/IRenderState
+    (render-state [_ state]
+      (dom/div
+        #js {:style #js {:clear "both"
+                         :width "100%"}}
+        (dom/input {:type "text" :value (:text state)})
+        (dom/label nil "this is the label")))))
+
+(om/root mini-buffer app-state
+  {:target (. js/document (getElementById "mini-buffer"))})
