@@ -67,7 +67,7 @@
       (prn (:repos (:body repo-list)))
       (swap! app-state assoc :repos (:repos (:body repo-list))))))
 ; uncomment for 'real' use
-(comment (update-repo-list))
+;(update-repo-list)
 
 (defn load-map [path]
   (let [loading-map {:input {:children [{:atts {:fullyQualifiedJavaName "Loading input..."}}]}
@@ -92,6 +92,8 @@
 
 (defn handle-change [e owner {:keys [text]}]
   (om/set-state! owner :text (.. e -target -value)))
+;(defn handle-change [e text owner]
+  ;(om/transact! text #(.. e -target -value)))
 
 (defn find-fuzzy-matches [coll query]
   (let [contains-all (fn [y xs]
@@ -123,6 +125,45 @@
   {:target (. js/document (getElementById "search-area"))})
   )
 
+; higher-order editable component and helpers
+(extend-type string
+  ICloneable
+  (-clone [s] (js/String. s)))
+(extend-type js/String
+  ICloneable
+  (-clone [s] (js/String. s))
+  om/IValue
+  (-value [s] (str s)))
+
+(defn display [show]
+  (if show
+    #js {}
+    #js {:display "none"}))
+
+(defn commit-change [text owner]
+  (om/set-state! owner :editing false))
+
+(defn editable [text owner]
+  (reify
+    om/IInitState
+    (init-state [_]
+      {:editing false})
+    om/IRenderState
+    (render-state [_ {:keys [editing]}]
+      (dom/li #js {:onClick #(om/set-state! owner :editing true)}
+              (dom/span #js {:style (display (not editing))} (om/value text))
+              (dom/input
+                #js {:style (display editing)
+                     :value (om/value text)
+                     :onChange #(handle-change % text owner)
+                     :onKeyDown #(when (= (.-key  %) "Enter")
+                                   (commit-change text owner))
+                     :onBlur (fn [e] (commit-change text owner))})
+              ))))
+              ;(dom/button
+                ;#js {:style (display (not editing))
+                     ;:onClick #(om/set-state! owner :editing true)}
+                ;"Edit")))))
 
 ; tree view from here down
 (defn get-docdef-atts [xtl]
@@ -130,19 +171,30 @@
 
 (defn att-component [[k v] owner]
   (om/component
-    (dom/li nil (str (name k) ": " v))))
+    (dom/li #js {:className "att"}
+            (str (name k) ": " v))))
 
 (defn atts-component [atts owner]
-  (om/component
-    (dom/div #js {:style #js {:border "1px solid green"}}
-             (apply dom/ul nil (om/build-all att-component (seq atts))))))
+  (reify
+    om/IInitState
+    (init-state [_]
+      {:hidden false})
+    om/IRenderState
+    (render-state [_ {:keys [hidden]}]
+      (dom/div #js {:style  #js {:border "1px solid green"}
+                    :className "atts"}
+               (apply dom/ul nil (om/build-all att-component (seq atts)))))))
+               ;(apply dom/ul nil (om/build-all editable (att-component (seq atts) atts)))))))
+               ;(apply dom/ul nil (om/build-all editable (vals atts)))))))
 
 (defn node-component [node owner]
   (reify
     om/IRender
     (render [_]
       (dom/div nil
-               (dom/ul #js {:style #js {:border "1px solid blue"}}
+               (dom/ul #js {:style #js {:border "1px solid blue"}
+                            :className "node"}
+                       (dom/strong nil (-> node :atts :javaName str))
                        (dom/li nil (str "tag: " (:name node)))
                        (dom/li nil (str "text: " (om/value (:text node))))
                        (dom/li nil (str "atts: "))
@@ -154,9 +206,13 @@
 (defn xtl-component [xtl owner]
   (om/component
     (dom/div #js {:id (-> xtl get-docdef-atts :fullyQualifiedJavaName)
+                  :className "xtl"
                   :style #js {:border "1px solid red"
-                              ;:float "left"
-                              ;:width "500px"}}
+                              :float "left"
+                              ;:width "50%"
+                              :width "40%"
+                              :overflow "hidden"
+                              :margin "50px"
                               }}
              (dom/h3 nil (str "xtl name: " (-> xtl get-docdef-atts :fullyQualifiedJavaName)))
              (om/build node-component xtl))))
@@ -171,7 +227,6 @@
                  (dom/ul nil
                          (om/build xtl-component input)
                          (om/build xtl-component output)))))))
-
 
 (defn map-view [app owner]
   (reify
