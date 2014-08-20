@@ -1,0 +1,4 @@
+- make sub-components of map-view tile-able
+- make tabs for each opened map under map-view
+- add minibuffer that users can execute commands from (emacs-like)
+- make map loading non-blocking and truly async
