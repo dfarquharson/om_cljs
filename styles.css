@@ -1,13 +1,44 @@
+/*
 ul li input {
     width: 400px;
 }
+
 ul li button {
     margin-left: 10px;
 }
+*/
 
 body {
     background: #333;
     color: #cdcdcd;
     margin: 3em auto;
     font: 14px/16px "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+div {
+    border: 1px solid black;
+    /*padding: 10px 40px; /* use to show extraneous divs */
+    /*resize: both;*/
+    overflow: auto;
+}
+
+.tile-group {
+    display: table;
+    clear: both;
+}
+
+div.xtl {
+    -moz-box-sizing: border-box; /* Firefox */
+    box-sizing: border-box;
+    width: 50%;
+    border: 1em solid red;
+    float: left;
+}
+
+div.tile {
+    float: left;
+    width: 500px;
+    padding: 10px 10px;
+    resize: both;
+    overflow: auto;
 }

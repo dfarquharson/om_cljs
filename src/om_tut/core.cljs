@@ -13,15 +13,19 @@
 (def app-state
   (atom {:repos ["loading repos..."]
          :response "nothing here yet"
+         :windows [{:tiles [{:text "Tile 1"}
+                            {:text "Tile 2"}
+                            {:text "Tile 3"}
+                            {:text "Tile 4"}]}
+                    ;{:tiles [{:text "Tile 1"}
+                             ;{:text "Tile 2"}
+                             ;{:text "Tile 3"}]}
+                   ]
          :map {:input
-               {:atts
-                {:name "Loading Input Tree..."}
-                :children [{:atts
+               {:children [{:atts
                             {:fullyQualifiedJavaName "No Input Tree Selected"}}]}
                :output
-               {:atts
-                {:name "Loading Output Tree..."}
-                :children [{:atts
+               {:children [{:atts
                             {:fullyQualifiedJavaName "No Output Tree Selected"}}]}}}))
 
 (def xdapi "http://localhost:5000/xd/")
@@ -126,6 +130,7 @@
   )
 
 ; higher-order editable component and helpers
+(comment
 (extend-type string
   ICloneable
   (-clone [s] (js/String. s)))
@@ -134,6 +139,7 @@
   (-clone [s] (js/String. s))
   om/IValue
   (-value [s] (str s)))
+  )
 
 (defn display [show]
   (if show
@@ -181,7 +187,7 @@
       {:hidden false})
     om/IRenderState
     (render-state [_ {:keys [hidden]}]
-      (dom/div #js {:style  #js {:border "1px solid green"}
+      (dom/div #js {:style  #js {:border "1px solid black"}
                     :className "atts"}
                (apply dom/ul nil (om/build-all att-component (seq atts)))))))
                ;(apply dom/ul nil (om/build-all editable (att-component (seq atts) atts)))))))
@@ -192,7 +198,7 @@
     om/IRender
     (render [_]
       (dom/div nil
-               (dom/ul #js {:style #js {:border "1px solid blue"}
+               (dom/ul #js {:style #js {:border "1px solid black"}
                             :className "node"}
                        (dom/strong nil (-> node :atts :javaName str))
                        (dom/li nil (str "tag: " (:name node)))
@@ -207,9 +213,8 @@
   (om/component
     (dom/div #js {:id (-> xtl get-docdef-atts :fullyQualifiedJavaName)
                   :className "xtl"
-                  :style #js {:border "1px solid red"
+                  :style #js {:border "1px solid black"
                               :float "left"
-                              ;:width "50%"
                               :width "40%"
                               :overflow "hidden"
                               :margin "50px"
@@ -244,8 +249,38 @@
                  #js {:onClick #(load-map (:text state))} "Load Map")
                (om/build mapping-area app)))))
 
-(om/root map-view app-state
-  {:target (. js/document (getElementById "map-workspace"))})
+;(om/root map-view app-state
+  ;{:target (. js/document (getElementById "map-workspace"))})
+
+(defn tile-component [tile owner]
+  (reify
+    om/IRender
+    (render [_]
+      (prn tile)
+      (dom/div #js {:className "tile"}
+               (dom/p nil (:text tile))))))
+
+(defn tile-group-component [window owner]
+  (reify
+    om/IRender
+    (render [_]
+      (dom/div nil
+               (dom/h2 #js {:className "tile-group"} "Tile Group")
+               (-> window :tiles prn)
+               (apply dom/div nil
+                      (om/build-all tile-component (:tiles window)))))))
+
+(defn tabbed-tile-group-container [app owner]
+  (reify
+    om/IRender
+    (render [_]
+      (dom/div nil
+               (dom/h2 nil "The Tabbed Holder of Tile Groups")
+               (apply dom/div nil
+                      (om/build-all tile-group-component (:windows app)))))))
+
+(om/root tabbed-tile-group-container app-state
+  {:target (. js/document (getElementById "tiling-area"))})
 
 ; should be focused with C-x C-m
 ; users can bind commands to the keyboard shortcuts of their choice from here
@@ -260,8 +295,8 @@
       (dom/div
         #js {:style #js {:clear "both"
                          :width "100%"}}
-        (dom/input {:type "text" :value (:text state)})
-        (dom/label nil "this is the label")))))
+        (dom/input {:id "mini-buffer" :type "text" :value (:text state)})
+        (dom/label nil "<-- minibuffer")))))
 
-(om/root mini-buffer app-state
-  {:target (. js/document (getElementById "mini-buffer"))})
+;(om/root mini-buffer app-state
+  ;{:target (. js/document (getElementById "mini-buffer"))})
