@@ -38,6 +38,7 @@ div.xtl {
 div.tile {
     float: left;
     width: 500px;
+    height: 150px;
     padding: 10px 10px;
     resize: both;
     overflow: auto;

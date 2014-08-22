@@ -4,22 +4,25 @@
             [om.dom :as dom :include-macros true]
             [clojure.zip :as zip]
             [clojure.string :as string]
-            [cljs.core.async :refer [put! chan <! >! close! timeout]]
+            [cljs.core.async :as async :refer [put! chan <! >! close! timeout]]
             [cljs-http.client :as http]
-            [clojure.browser.repl :as repl]))
+            [clojure.browser.repl :as repl]
+            [goog.events :as events])
+  (:import [goog.events EventType]))
 
 (enable-console-print!)
 
 (def app-state
   (atom {:repos ["loading repos..."]
          :response "nothing here yet"
-         :windows [{:tiles [{:text "Tile 1"}
-                            {:text "Tile 2"}
-                            {:text "Tile 3"}
-                            {:text "Tile 4"}]}
-                    ;{:tiles [{:text "Tile 1"}
-                             ;{:text "Tile 2"}
-                             ;{:text "Tile 3"}]}
+         :windows [{:tiles [{:content "Tile 1"}
+                            {:content "Tile 2"}
+                            {:content "Tile 3"}
+                            {:content "Tile 4"}]}
+                    ;{:tiles [{:content "Tile 1"}
+                             ;{:content "Tile 2"}
+                             ;{:content "Tile 3"}]}
+                    ;{:tiles [{}]}
                    ]
          :map {:input
                {:children [{:atts
@@ -63,7 +66,7 @@
       (prn (:body echo-post))
       (prn (:body echo-delete))
       (swap! app-state assoc :response (:body echo-get)))))
-(comment (test-get-post-delete))
+;(test-get-post-delete)
 
 (defn update-repo-list []
   (go
@@ -76,6 +79,11 @@
 (defn load-map [path]
   (let [loading-map {:input {:children [{:atts {:fullyQualifiedJavaName "Loading input..."}}]}
                      :output {:children [{:atts {:fullyQualifiedJavaName "Loading output..."}}]}}]
+    ;(-> app-state :windows first :tiles first :content prn)
+    (-> loading-map :input prn)
+    ;(om/transact! app-state 
+    ;(swap! app-state assoc (-> :windows first :tiles first :content loading-map :input))
+    ;(swap! app-state assoc (-> :windows first :tiles second :content loading-map :output)))
     (swap! app-state assoc :map loading-map))
   (go
     (let [map-path (map-url path)
@@ -96,8 +104,9 @@
 
 (defn handle-change [e owner {:keys [text]}]
   (om/set-state! owner :text (.. e -target -value)))
-;(defn handle-change [e text owner]
-  ;(om/transact! text #(.. e -target -value)))
+;; this way is better because it doesn't require extending strings ICloneable
+;(defn handle-change [e data edit-key owner]
+  ;(om/transact! data edit-key (fn [_] (.. e -target -value))))
 
 (defn find-fuzzy-matches [coll query]
   (let [contains-all (fn [y xs]
@@ -252,13 +261,63 @@
 ;(om/root map-view app-state
   ;{:target (. js/document (getElementById "map-workspace"))})
 
+;; input listener area keyboard/mouse
+
+(defn listen [el type]
+  (let [out (chan)]
+    (events/listen el type #(put! out %))
+    out))
+
+(defn mouse-view [app owner]
+  (reify
+    om/IWillMount
+    (will-mount [_]
+      (let [mouse-chan
+            (async/map
+              (fn [e] [(.-clientX e) (.-clientY e)])
+              [(listen js/window EventType/MOUSEMOVE)])]
+        (go (while true
+              (om/update! app :mouse (<! mouse-chan))))))
+    om/IRender
+    (render [_]
+      (dom/p nil
+             (when-let [pos (:mouse app)]
+               (pr-str (:mouse app)))))))
+
+(defn keyboard-view [app owner]
+  (reify
+    om/IWillMount
+    (will-mount [_]
+      (let [key-chan
+            (async/map
+              (fn [e] [(.-keycode e)])
+              [(listen js/window EventType/KEYUP)])]
+        (go (while true
+              (om/update! app :key (<! key-chan))))))
+    om/IRender
+    (render [_]
+      (dom/p nil
+             (when-let [key (:key app)]
+               (pr-str (:key app)))))))
+
+(defn input-listener [app owner]
+  (om/component
+    (dom/div nil
+             (om/build mouse-view app)
+             (om/build keyboard-view app))))
+
+(om/root input-listener {:mouse nil :key nil}
+  {:target (. js/document (getElementById "input-area"))})
+
 (defn tile-component [tile owner]
   (reify
     om/IRender
     (render [_]
       (prn tile)
-      (dom/div #js {:className "tile"}
-               (dom/p nil (:text tile))))))
+      (dom/div #js {:className "tile"
+                    :onmouseover "style.color='black'"
+                    :onmouseout "style.color='white'"}
+               (dom/p nil (:content tile))))))
 
 (defn tile-group-component [window owner]
   (reify
@@ -275,7 +334,7 @@
     om/IRender
     (render [_]
       (dom/div nil
-               (dom/h2 nil "The Tabbed Holder of Tile Groups")
+               ;(dom/h2 nil "The Tabbed Holder of Tile Groups")
                (apply dom/div nil
                       (om/build-all tile-group-component (:windows app)))))))
 
