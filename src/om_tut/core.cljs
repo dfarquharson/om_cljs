@@ -24,6 +24,11 @@
                              ;{:content "Tile 3"}]}
                     ;{:tiles [{}]}
                    ]
+         :mouse nil
+         :keyCode nil
+         :metaKey nil
+         :shiftKey nil
+         :ctrlKey nil
          :map {:input
                {:children [{:atts
                             {:fullyQualifiedJavaName "No Input Tree Selected"}}]}
@@ -290,15 +295,15 @@
     (will-mount [_]
       (let [key-chan
             (async/map
-              (fn [e] [(.-keycode e)])
-              [(listen js/window EventType/KEYUP)])]
+              (fn [e] [(.-keyCode e)])
+              [(listen js/document EventType/KEYDOWN)])]
         (go (while true
-              (om/update! app :key (<! key-chan))))))
+              (om/update! app :keyCode (<! key-chan))))))
     om/IRender
     (render [_]
       (dom/p nil
-             (when-let [key (:key app)]
-               (pr-str (:key app)))))))
+             (when-let [key (:keyCode app)]
+               (pr-str (:keyCode app)))))))
 
 (defn input-listener [app owner]
   (om/component
@@ -306,7 +311,7 @@
              (om/build mouse-view app)
              (om/build keyboard-view app))))
 
-(om/root input-listener {:mouse nil :key nil}
+(om/root input-listener app-state
   {:target (. js/document (getElementById "input-area"))})
 
 (defn tile-component [tile owner]
@@ -315,8 +320,9 @@
     (render [_]
       (prn tile)
       (dom/div #js {:className "tile"
-                    :onmouseover "style.color='black'"
-                    :onmouseout "style.color='white'"}
+                    ;:onmouseover "style.color='black'"
+                    ;:onmouseout "style.color='white'"}
+                    }
                (dom/p nil (:content tile))))))
 
 (defn tile-group-component [window owner]
